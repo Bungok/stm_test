@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -76,7 +75,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -85,7 +83,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -101,22 +98,17 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-  uint8_t frequency = 0;
-  uint8_t command = 4;
-  uint8_t servo_num = 4; 
+  //i2c_buffer[0] = 0b11100000;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if(HAL_I2C_Slave_Receive(&hi2c1,(uint8_t*)i2c_buffer, I2C_BUFFERSIZE, 10000) != HAL_OK){
-      Error_Handler();
+    while (HAL_I2C_GetState(&hi2c1) != HAL_I2C_STATE_READY)
+    {
     }
-
-    if(i2c_buffer[0] == 0b10000000){
-    }
-
+    HAL_I2C_Slave_Receive_IT(&hi2c1,(uint8_t*)i2c_buffer, I2C_BUFFERSIZE);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -186,14 +178,14 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.ClockSpeed = 400000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.OwnAddress1 = 108;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
   hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_ENABLE;
   if (HAL_I2C_Init(&hi2c1) != HAL_OK)
   {
     Error_Handler();
@@ -243,6 +235,18 @@ static void MX_TIM3_Init(void)
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
   {
     Error_Handler();
   }
@@ -354,13 +358,39 @@ int servo_op(enum servo_command com, uint8_t num){
       break;
   }
 
-  TIM3->CCR1 = (uint32_t)(com * (TIM3->ARR + 1) ) / 100;
+  TIM3->CCR1 = (uint32_t)(com * (TIM3->ARR + 1) ) / 100; // calculate duty cycle HIGH time from %
   
+  HAL_GPIO_WritePin(GPIOA,LD2_Pin,GPIO_PIN_SET);
   HAL_TIM_PWM_Start(&htim3,channel);
-  HAL_Delay(3000);
+  HAL_Delay(1000);
   HAL_TIM_PWM_Stop(&htim3,channel);
+  HAL_GPIO_WritePin(GPIOA,LD2_Pin,GPIO_PIN_RESET);
 
   return 0;
+}
+
+void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c1)
+{
+  if(i2c_buffer[0] >> 5 < 4){
+      uint8_t com = i2c_buffer[0] >> 5; // extract bits 8,7 and 6
+      switch (com)
+      {
+      case 0:
+      // Arm
+        system_state = ARMED;
+        break;
+      case 1:
+      // Drop
+        servo_op(OPEN,(i2c_buffer[0] & ~(7 << 5)) >> 3); // extract bits 5 and 4
+        break;
+      case 2:
+        servo_op(CLOSE,(i2c_buffer[0] & ~(7 << 5)) >> 3); // extract bits 5 and 4
+        break;
+      case 3:
+        system_state = DISARMED;
+        break;
+      }
+    }
 }
 /* USER CODE END 4 */
 

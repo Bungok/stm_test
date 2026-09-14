@@ -41,7 +41,7 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-#define I2C_BUFFERSIZE 1
+#define I2C_BUFFERSIZE 2
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
